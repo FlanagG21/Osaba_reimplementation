@@ -7,7 +7,7 @@ import classes
 
 DEPOT = None
 
-def isReachable(distance, vehicle, tp):
+def isReachable(distances, vehicle, tp):
     """checks if the current vehicle can reach the given node
 
     Args:
@@ -23,8 +23,8 @@ def isReachable(distance, vehicle, tp):
     under_space_capacity = vehicle.remaining_volume >= tp.package_volume
     under_capacity = under_weight_capacity and under_space_capacity
     # then check if time restraints are obeyed
-    time_to_candidate = distance[vehicle.current_location][tp.node_id]
-    time_back_to_depot = distance[tp.node_id][DEPOT.node_id]
+    time_to_candidate = distances[vehicle.current_location][tp.node_id]
+    time_back_to_depot = distances[tp.node_id][DEPOT.node_id]
     can_arrive_on_time = (vehicle.time_spent + time_to_candidate) <= tp.deadline
     can_finish_workday = (vehicle.time_spent + time_to_candidate + time_back_to_depot) <= DEPOT.deadline
     return under_capacity and can_arrive_on_time and can_finish_workday
@@ -130,7 +130,7 @@ def readInData(filepath):
     # compute distance matrix
     distance = compute_distance_matrix(node_objects)
     global DEPOT
-    DEPOT= nodes[0]
+    DEPOT= node_objects[0]
     return trucks, node_objects, distance
 
 def all_delivered(nodes):
@@ -143,3 +143,18 @@ def all_delivered(nodes):
         bool: true if all deliveries are complete
     """
     return all(node.delivered for node in nodes if node.node_id != DEPOT.node_id)
+
+def getSubset(vehicle, nodes, distances, destination):
+    subset = []
+
+    for node in nodes:
+        if node.delivered:
+            continue
+        
+        # basic feasibility (your existing logic)
+        if not isReachable(distances, vehicle, node):
+            continue
+        
+        subset.append(node)
+    time_dest_to_depot = distances[destination.node_id][DEPOT.node_id]
+    return subset, min(destination.deadline - vehicle.time_spent,DEPOT.deadline - vehicle.time_spent - time_dest_to_depot)

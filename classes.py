@@ -1,10 +1,10 @@
-DEPOT = 0
+DEPOT_ID = 0
 
 class Vehicle:
     def __init__(self, max_weight, max_volume, rental_cost):
         self.remaining_weight = max_weight
         self.remaining_volume = max_volume
-        self.current_location = DEPOT
+        self.current_location = DEPOT_ID
         self.time_spent = 0
         self.rental_cost = rental_cost
 
@@ -17,5 +17,5 @@ class Node:
         self.package_weight = package_weight
         self.package_volume = package_volume
         self.deadline = deadline
-        self.is_tp = (node_id != DEPOT) and (deadline <= max_working_day)
+        self.is_tp = (node_id != DEPOT_ID) and (deadline < max_working_day)
         self.delivered = False
