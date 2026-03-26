@@ -2,7 +2,7 @@ import classical_algo
 import classes
 import dimod
 
-FILEPATH= ""
+FILEPATH= "/work/Osaba_reimplementation/Osaba_paper_data/data/D14_P1.pdp"
 
 
 def find_route(vehicle, destination, nodes, distances):

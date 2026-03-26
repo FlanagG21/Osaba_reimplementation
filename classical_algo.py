@@ -29,23 +29,23 @@ def isReachable(distances, vehicle, tp):
     can_finish_workday = (vehicle.time_spent + time_to_candidate + time_back_to_depot) <= DEPOT.deadline
     return under_capacity and can_arrive_on_time and can_finish_workday
 
-def pickNextRoute(vehicle, tpQueue, distance):
+def pickNextRoute(vehicle, tpQueue, distances):
     """a method to select the next route
 
     Args:
         vehicle (vehicle): the vehicle performing the route
         tpQueue (queue[node]): a priority queue of nodes
-        distance ([[int]]): a matrix of distances
+        distances ([[int]]): a matrix of distances
     Returns:
         node: the node to create the next route to
     """
     tp = None
-    if tpQueue.isempty():
+    if len(tpQueue) == 0:
         #scenario D, which is no priority nodes left
         tp = DEPOT
         return tp
     for tp in tpQueue:
-        if isReachable(distance, vehicle, tp):
+        if isReachable(distances, vehicle, tp):
             # Scenario A/C - found a reachable TP
             tpQueue.remove(tp)
             return tp
@@ -148,10 +148,9 @@ def getSubset(vehicle, nodes, distances, destination):
     subset = []
 
     for node in nodes:
-        if node.delivered:
+        if node.delivered or node.node_id == DEPOT.node_id:
             continue
         
-        # basic feasibility (your existing logic)
         if not isReachable(distances, vehicle, node):
             continue
         
