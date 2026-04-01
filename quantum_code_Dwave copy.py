@@ -5,14 +5,18 @@ import dimod
 FILEPATH= "/work/Osaba_reimplementation/Osaba_paper_data/data/D14_P1.pdp"
 
 
+
 def find_route(vehicle, destination, nodes, distances):
     """
 
     Returns:
-        _type_: _description_
+        route_nodes, route_duration: the nodes in the route and the time the route will take to run
     """
     #TODO implement dwave runner for finding a path
     subset, rt = classical_algo.getSubset(vehicle, nodes, distances, destination)
+    subset = sorted(
+    subset,
+    key=lambda n: distances[vehicle.current_location][n.node_id])[:4]   # try 6–10 max
     start_node = vehicle.current_location
     if isinstance(start_node, int):
         start_node = nodes[start_node]
@@ -21,50 +25,50 @@ def find_route(vehicle, destination, nodes, distances):
         subset.append(destination)
     # Create CQM
     cqm = dimod.ConstrainedQuadraticModel()
-
+    max_stops = min(3, len(subset))
     x = {}
     for node in subset:
-        for p in range(len(subset)):
+        for p in range(max_stops):
             x[(node.node_id, p)] = dimod.Binary(f"x_{node.node_id}_{p}")
     for i in subset:
         cqm.add_constraint(
-            sum(x[(i.node_id,p)] for p in range(len(subset))) <= 1
+            sum(x[(i.node_id,p)] for p in range(max_stops)) <= 1
         )
-    for p in range(len(subset)):
+    for p in range(max_stops):
         cqm.add_constraint(
             sum(x[(i.node_id,p)] for i in subset) <= 1
         )
-    for p in range(len(subset)-1):
+    for p in range(max_stops-1):
         cqm.add_constraint(
             sum(x[(i.node_id,p)] for i in subset)
             - sum(x[(i.node_id,p+1)] for i in subset) >= 0
         )
-    cqm.add_constraint(sum(x[(destination.node_id, p)] for p in range(len(subset))) == 1)
+    cqm.add_constraint(sum(x[(destination.node_id, p)] for p in range(max_stops)) == 1)
     cqm.add_constraint(
     sum(
         distances[i.node_id][j.node_id] * x[(i.node_id,p)] * x[(j.node_id,p+1)]
         for i in subset for j in subset if i != j
-        for p in range(len(subset)-1)
+        for p in range(max_stops-1)
     ) <= rt)
     cqm.add_constraint(
-    sum(x[(i.node_id,p)] * i.package_weight for i in subset for p in range(len(subset)))
+    sum(x[(i.node_id,p)] * i.package_weight for i in subset for p in range(max_stops))
     <= vehicle.remaining_weight)
 
     cqm.add_constraint(
-        sum(x[(i.node_id,p)] * i.package_volume for i in subset for p in range(len(subset)))
+        sum(x[(i.node_id,p)] * i.package_volume for i in subset for p in range(max_stops))
         <= vehicle.remaining_volume)
     # distance objective (o1)
     obj1 = sum(
         distances[i.node_id][j.node_id] * x[(i.node_id,p)] * x[(j.node_id,p+1)]
         for i in subset for j in subset if i != j
-        for p in range(len(subset)-1)
+        for p in range(max_stops-1)
     )
 
     # destination lateness objective (o2)
     obj2 = sum(
         -x[(destination.node_id, p)]
-        - sum(x[(destination.node_id, p2)] for p2 in range(p, len(subset)))
-        for p in range(len(subset))
+        - sum(x[(destination.node_id, p2)] for p2 in range(p, max_stops))
+        for p in range(max_stops)
     )
 
     cqm.set_objective(obj1 + 2*obj2)
@@ -76,9 +80,10 @@ def find_route(vehicle, destination, nodes, distances):
 
 
 def solve_cqm(cqm):
-    sampler = dimod.SimulatedAnnealingCQMSampler()
-    solution = sampler.sample_cqm(cqm, num_reads=100)
-    best = solution.first  # take the best feasible solution
+    sampler = dimod.ExactCQMSolver()
+    sampleSet = sampler.sample_cqm(cqm)
+    sampleSet = sampleSet.filter(lambda s: s.is_feasible)
+    best = sampleSet.first.sample
     return best
 
 def extract_route(best_sample):
@@ -107,10 +112,10 @@ if __name__ == "__main__":
     rental = sorted([v for v in vehicles if v.rental_cost > 0], key=lambda v: v.remaining_weight * v.remaining_volume)
     vehicleStack = owned + rental
     tpQueue = sorted([node for node in nodes if node.is_tp], key=lambda n: n.deadline)
-    while not vehicleStack.isempty() and not classical_algo.all_delivered(nodes):
+    while not len(vehicleStack) == 0 and not classical_algo.all_delivered(nodes):
         nextVehicle = vehicleStack.pop()
         nextDest = classical_algo.pickNextRoute(nextVehicle, tpQueue, distances)
-        route_duration, route = find_route(nextVehicle, nextDest, nodes, distances)
+        route, route_duration = find_route(nextVehicle, nextDest, nodes, distances)
         for node in route:
             nodes[node.node_id].delivered = True
             nextVehicle.remaining_weight -= node.package_weight
@@ -124,5 +129,5 @@ if __name__ == "__main__":
         nextVehicle.current_location = nextDest.node_id
         
         if (nextDest.node_id != classical_algo.DEPOT.node_id):
-            vehicleStack.push(nextVehicle)
+            vehicleStack.insert(0, nextVehicle)
 
