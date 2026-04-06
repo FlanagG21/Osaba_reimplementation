@@ -1,0 +1,37 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Data files (optional – uncomment if needed)
+# *.csv
+# *.pdp
+# data/
+
+# D-Wave / outputs (optional)
+# *.json
+# results/
+
+# Build / temp
+build/
+dist/
+*.egg-info/
