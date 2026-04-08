@@ -4,7 +4,7 @@ import dimod
 
 FILEPATH= "/work/Osaba_reimplementation/Osaba_paper_data/data/D14_P1.pdp"
 
-
+Final_route = []
 
 def find_route(vehicle, destination, nodes, distances):
     """
@@ -130,4 +130,5 @@ if __name__ == "__main__":
         
         if (nextDest.node_id != classical_algo.DEPOT.node_id):
             vehicleStack.insert(0, nextVehicle)
+    
 
