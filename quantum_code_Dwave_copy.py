@@ -25,7 +25,7 @@ def find_route(vehicle, destination, nodes, distances):
         subset.append(destination)
     # Create CQM
     cqm = dimod.ConstrainedQuadraticModel()
-    max_stops = min(3, len(subset))
+    max_stops = min(5, len(subset))
     x = {}
     for node in subset:
         for p in range(max_stops):
@@ -43,7 +43,8 @@ def find_route(vehicle, destination, nodes, distances):
             sum(x[(i.node_id,p)] for i in subset)
             - sum(x[(i.node_id,p+1)] for i in subset) >= 0
         )
-    cqm.add_constraint(sum(x[(destination.node_id, p)] for p in range(max_stops)) == 1)
+    if destination.node_id != classical_algo.DEPOT.node_id:
+        cqm.add_constraint(sum(x[(destination.node_id, p)] for p in range(max_stops)) == 1)
     cqm.add_constraint(
     sum(
         distances[i.node_id][j.node_id] * x[(i.node_id,p)] * x[(j.node_id,p+1)]
