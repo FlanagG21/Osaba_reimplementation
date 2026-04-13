@@ -7,97 +7,113 @@ FILEPATH= "/work/Osaba_reimplementation/Osaba_paper_data/data/D14_P1.pdp"
 Final_route = []
 
 def find_route(vehicle, destination, nodes, distances):
-    """
-
-    Returns:
-        route_nodes, route_duration: the nodes in the route and the time the route will take to run
-    """
-    #TODO implement dwave runner for finding a path
     subset, rt = classical_algo.getSubset(vehicle, nodes, distances, destination)
-    subset = sorted(
-    subset,
-    key=lambda n: distances[vehicle.current_location][n.node_id])[:4]   # try 6–10 max
-    start_node = vehicle.current_location
-    if isinstance(start_node, int):
-        start_node = nodes[start_node]
+    
+    if len(subset) == 0:
+        return [], 0
 
-    if destination not in subset:
+    subset = sorted(
+        subset,
+        key=lambda n: distances[vehicle.current_location][n.node_id])[:4]
+
+    if destination.node_id != classical_algo.DEPOT.node_id and destination not in subset:
         subset.append(destination)
-    # Create CQM
+
+    if len(subset) == 0:
+        return [], 0
+
     cqm = dimod.ConstrainedQuadraticModel()
     max_stops = min(5, len(subset))
     x = {}
     for node in subset:
         for p in range(max_stops):
             x[(node.node_id, p)] = dimod.Binary(f"x_{node.node_id}_{p}")
+
+    # each node visited at most once
     for i in subset:
         cqm.add_constraint(
-            sum(x[(i.node_id,p)] for p in range(max_stops)) <= 1
+            sum(x[(i.node_id, p)] for p in range(max_stops)) <= 1
         )
+    # at most one node per position
     for p in range(max_stops):
         cqm.add_constraint(
-            sum(x[(i.node_id,p)] for i in subset) <= 1
+            sum(x[(i.node_id, p)] for i in subset) <= 1
         )
-    for p in range(max_stops-1):
+    # no gaps in sequence
+    for p in range(max_stops - 1):
         cqm.add_constraint(
-            sum(x[(i.node_id,p)] for i in subset)
-            - sum(x[(i.node_id,p+1)] for i in subset) >= 0
+            sum(x[(i.node_id, p)] for i in subset)
+            - sum(x[(i.node_id, p + 1)] for i in subset) >= 0
         )
+
+    # destination constraint
     if destination.node_id != classical_algo.DEPOT.node_id:
-        cqm.add_constraint(sum(x[(destination.node_id, p)] for p in range(max_stops)) == 1)
-    cqm.add_constraint(
-    sum(
-        distances[i.node_id][j.node_id] * x[(i.node_id,p)] * x[(j.node_id,p+1)]
-        for i in subset for j in subset if i != j
-        for p in range(max_stops-1)
-    ) <= rt)
-    cqm.add_constraint(
-    sum(x[(i.node_id,p)] * i.package_weight for i in subset for p in range(max_stops))
-    <= vehicle.remaining_weight)
+        cqm.add_constraint(
+            sum(x[(destination.node_id, p)] for p in range(max_stops)) == 1
+        )
+    else:
+        cqm.add_constraint(
+            sum(x[(i.node_id, p)] for i in subset for p in range(max_stops)) >= 1
+        )
 
+    # capacity constraints
     cqm.add_constraint(
-        sum(x[(i.node_id,p)] * i.package_volume for i in subset for p in range(max_stops))
+        sum(x[(i.node_id, p)] * i.package_weight for i in subset for p in range(max_stops))
+        <= vehicle.remaining_weight)
+    cqm.add_constraint(
+        sum(x[(i.node_id, p)] * i.package_volume for i in subset for p in range(max_stops))
         <= vehicle.remaining_volume)
-    # distance objective (o1)
-    obj1 = sum(
-        distances[i.node_id][j.node_id] * x[(i.node_id,p)] * x[(j.node_id,p+1)]
-        for i in subset for j in subset if i != j
-        for p in range(max_stops-1)
-    )
 
-    # destination lateness objective (o2)
-    obj2 = sum(
-        -x[(destination.node_id, p)]
-        - sum(x[(destination.node_id, p2)] for p2 in range(p, max_stops))
-        for p in range(max_stops)
-    )
+    # objective 1: minimize distance
+    if len(subset) >= 2:
+        obj1 = sum(
+            distances[i.node_id][j.node_id] * x[(i.node_id, p)] * x[(j.node_id, p + 1)]
+            for i in subset for j in subset if i != j
+            for p in range(max_stops - 1)
+        )
+        # time budget constraint
+        cqm.add_constraint(obj1 <= rt)
+    else:
+        obj1 = 0.0 * list(x.values())[0]
 
-    cqm.set_objective(obj1 + 2*obj2)
-    solution= solve_cqm(cqm)
+    # objective 2: push destination to last position (only for TP nodes)
+    if destination.node_id != classical_algo.DEPOT.node_id:
+        obj2 = sum(
+            -x[(destination.node_id, p)]
+            - sum(x[(destination.node_id, p2)] for p2 in range(p, max_stops))
+            for p in range(max_stops)
+        )
+        cqm.set_objective(obj1 + 2 * obj2)
+    else:
+        cqm.set_objective(obj1)
+
+    solution = solve_cqm(cqm)
+    if solution is None:
+        return [], 0
+
     route_ids = extract_route(solution)
     route_nodes = [nodes[nid] for nid in route_ids]
     route_duration = compute_route_duration(route_ids, distances)
     return route_nodes, route_duration
 
-
 def solve_cqm(cqm):
     sampler = dimod.ExactCQMSolver()
     sampleSet = sampler.sample_cqm(cqm)
-    sampleSet = sampleSet.filter(lambda s: s.is_feasible)
-    best = sampleSet.first.sample
-    return best
+    feasible = sampleSet.filter(lambda s: s.is_feasible)
+    if len(feasible) == 0:
+        return None
+    return feasible.first.sample
 
 def extract_route(best_sample):
-    # Create a dict: position → node
     route_dict = {}
+    print(f"Selected variables: {[var for var, val in best_sample.items() if val == 1]}")
     for var, value in best_sample.items():
         if value == 1:
-            _, node_id, pos = var.split('_')  # 'x_nodeId_pos'
+            _, node_id, pos = var.split('_')
             pos = int(pos)
             node_id = int(node_id)
             route_dict[pos] = node_id
-
-    # Build the route in order of positions
+    print(f"Route dict: {route_dict}")
     route = [route_dict[p] for p in sorted(route_dict)]
     return route
 

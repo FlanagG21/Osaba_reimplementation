@@ -155,5 +155,6 @@ def getSubset(vehicle, nodes, distances, destination):
             continue
         
         subset.append(node)
+    #print(f"Subset: {[n.node_id for n in subset]}")
     time_dest_to_depot = distances[destination.node_id][DEPOT.node_id]
     return subset, min(destination.deadline - vehicle.time_spent,DEPOT.deadline - vehicle.time_spent - time_dest_to_depot)
